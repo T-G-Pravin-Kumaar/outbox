@@ -1,0 +1,110 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum EmailStatus {
+  SCHEDULED
+  QUEUED
+  SENDING
+  SENT
+  FAILED
+  DELAYED
+}
+
+model User {
+  id               String            @id @default(uuid())
+  googleId         String?           @unique @map("google_id")
+  email            String            @unique
+  name             String?
+  avatarUrl        String?           @map("avatar_url")
+  createdAt        DateTime          @default(now()) @map("created_at")
+  updatedAt        DateTime          @updatedAt @map("updated_at")
+  senders          Sender[]
+  slackConnections SlackConnection[]
+
+  @@map("users")
+}
+
+model Sender {
+  id               String            @id @default(uuid())
+  userId           String?           @map("user_id")
+  email            String            @unique
+  displayName      String            @map("display_name")
+  smtpHost         String            @default("smtp.ethereal.email") @map("smtp_host")
+  smtpPort         Int               @default(587) @map("smtp_port")
+  smtpUser         String?           @map("smtp_user")
+  smtpPass         String?           @map("smtp_pass")
+  smtpSecure       Boolean           @default(false) @map("smtp_secure")
+  isDefault        Boolean           @default(false) @map("is_default")
+  createdAt        DateTime          @default(now()) @map("created_at")
+  updatedAt        DateTime          @updatedAt @map("updated_at")
+  user             User?             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  emails           Email[]
+  rateLimitWindows RateLimitWindow[]
+
+  @@index([userId])
+  @@map("senders")
+}
+
+model Email {
+  id             String      @id @default(uuid())
+  senderId       String      @map("sender_id")
+  recipientEmail String      @map("recipient_email")
+  subject        String
+  body           String      @db.Text
+  status         EmailStatus @default(SCHEDULED)
+  scheduledAt    DateTime    @map("scheduled_at")
+  sentAt         DateTime?   @map("sent_at")
+  bullmqJobId    String?     @map("bullmq_job_id")
+  idempotencyKey String      @unique @map("idempotency_key")
+  errorMessage   String?     @map("error_message") @db.Text
+  previewUrl     String?     @map("preview_url") @db.Text
+  metadata       Json?       @map("metadata")
+  createdAt      DateTime    @default(now()) @map("created_at")
+  updatedAt      DateTime    @updatedAt @map("updated_at")
+  sender         Sender      @relation(fields: [senderId], references: [id], onDelete: Cascade)
+
+  @@index([senderId])
+  @@index([status])
+  @@index([scheduledAt])
+  @@index([bullmqJobId])
+  @@map("emails")
+}
+
+model RateLimitWindow {
+  id          String   @id @default(uuid())
+  senderId    String   @map("sender_id")
+  windowStart DateTime @map("window_start")
+  emailsSent  Int      @default(0) @map("emails_sent")
+  limitValue  Int      @map("limit_value")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+  sender      Sender   @relation(fields: [senderId], references: [id], onDelete: Cascade)
+
+  @@unique([senderId, windowStart])
+  @@index([senderId, windowStart])
+  @@map("rate_limit_windows")
+}
+
+model SlackConnection {
+  id          String   @id @default(uuid())
+  userId      String   @map("user_id")
+  teamId      String   @map("team_id")
+  teamName    String?  @map("team_name")
+  channelId   String?  @map("channel_id")
+  channelName String?  @map("channel_name")
+  accessToken String   @map("access_token") @db.Text
+  webhookUrl  String?  @map("webhook_url") @db.Text
+  botUserId   String?  @map("bot_user_id")
+  connectedAt DateTime @default(now()) @map("connected_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, teamId])
+  @@map("slack_connections")
+}

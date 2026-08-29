@@ -1,0 +1,33 @@
+{
+  "name": "outbox-monorepo",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": [
+    "apps/*"
+  ],
+  "scripts": {
+    "dev:backend": "npm run dev --workspace=backend",
+    "dev:worker": "npm run dev:worker --workspace=backend",
+    "dev:frontend": "npm run dev --workspace=frontend",
+    "dev:services": "tsx scripts/dev-services.ts",
+    "worker": "npm run worker --workspace=backend",
+    "dev": "concurrently \"npm run dev:backend\" \"npm run dev:worker\" \"npm run dev:frontend\"",
+    "build": "npm run build --workspaces",
+    "lint": "npm run lint --workspaces",
+    "db:generate": "npm run db:generate --workspace=backend",
+    "db:migrate": "npm run db:migrate --workspace=backend",
+    "db:deploy": "npm run db:deploy --workspace=backend",
+    "db:seed": "npm run db:seed --workspace=backend",
+    "db:reset": "npm run db:reset --workspace=backend",
+    "db:studio": "npm run db:studio --workspace=backend"
+  },
+  "devDependencies": {
+    "@types/nodemailer": "^8.0.1",
+    "bullmq": "^6.3.1",
+    "concurrently": "^8.2.2",
+    "nodemailer": "^9.0.6",
+    "prisma": "5.14.0",
+    "redis-memory-server": "^0.17.1",
+    "tsx": "^4.10.5"
+  }
+}

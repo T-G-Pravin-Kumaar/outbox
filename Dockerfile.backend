@@ -15,8 +15,8 @@ RUN apk add --no-cache openssl libc6-compat
 COPY package.json package-lock.json ./
 COPY apps/backend/package.json ./apps/backend/
 
-# Install all dependencies (including devDependencies for build)
-RUN npm ci
+# Install dependencies ignoring optional postinstall scripts (avoids redis-memory-server build)
+RUN npm ci --ignore-scripts
 
 # ------------------------------------------------------------------------------
 # 2. Builder Stage
@@ -59,12 +59,9 @@ COPY --from=builder /app/apps/backend/prisma ./apps/backend/prisma
 
 WORKDIR /app/apps/backend
 
-# Expose Express server port
 EXPOSE 5000
 
-# Health check
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
   CMD curl -f http://localhost:5000/health || exit 1
 
-# Default command runs the API server (can be overridden to run the worker: node dist/worker.js)
 CMD ["node", "dist/index.js"]

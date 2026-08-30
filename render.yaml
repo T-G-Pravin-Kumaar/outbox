@@ -1,0 +1,114 @@
+services:
+  # ============================================================================
+  # 1. Backend Express API Web Service
+  # ============================================================================
+  - type: web
+    name: outbox-backend
+    runtime: docker
+    dockerfilePath: ./Dockerfile.backend
+    dockerContext: .
+    dockerCommand: sh -c "npx prisma migrate deploy && node dist/index.js"
+    healthCheckPath: /health
+    plan: free
+    region: oregon
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 5000
+      - key: FRONTEND_URL
+        value: https://frontend-kappa-ten-24.vercel.app
+      - key: BACKEND_URL
+        sync: false
+      - key: DATABASE_URL
+        fromDatabase:
+          name: outbox-postgres
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          type: redis
+          name: outbox-redis
+          property: connectionString
+      - key: JWT_SECRET
+        generateValue: true
+      - key: SESSION_SECRET
+        generateValue: true
+      - key: ADMIN_PASSWORD
+        value: admin
+      - key: SMTP_HOST
+        value: smtp.ethereal.email
+      - key: SMTP_PORT
+        value: 587
+      - key: SMTP_FROM
+        value: Outbox Scheduler <no-reply@outbox.reachinbox.ai>
+      - key: MAX_EMAILS_PER_HOUR
+        value: 200
+      - key: MAX_EMAILS_PER_HOUR_PER_SENDER
+        value: 5
+      - key: MIN_DELAY_SECONDS
+        value: 2
+      - key: WORKER_CONCURRENCY
+        value: 5
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: SLACK_CLIENT_ID
+        sync: false
+      - key: SLACK_CLIENT_SECRET
+        sync: false
+
+  # ============================================================================
+  # 2. BullMQ Email Background Worker Service
+  # ============================================================================
+  - type: worker
+    name: outbox-worker
+    runtime: docker
+    dockerfilePath: ./Dockerfile.backend
+    dockerContext: .
+    dockerCommand: node dist/worker.js
+    plan: free
+    region: oregon
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: outbox-postgres
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          type: redis
+          name: outbox-redis
+          property: connectionString
+      - key: JWT_SECRET
+        generateValue: true
+      - key: SESSION_SECRET
+        generateValue: true
+      - key: SMTP_HOST
+        value: smtp.ethereal.email
+      - key: SMTP_PORT
+        value: 587
+      - key: SMTP_FROM
+        value: Outbox Scheduler <no-reply@outbox.reachinbox.ai>
+      - key: MAX_EMAILS_PER_HOUR
+        value: 200
+      - key: MAX_EMAILS_PER_HOUR_PER_SENDER
+        value: 5
+      - key: MIN_DELAY_SECONDS
+        value: 2
+      - key: WORKER_CONCURRENCY
+        value: 5
+
+# ==============================================================================
+# Managed Databases & Key-Value Stores
+# ==============================================================================
+databases:
+  - name: outbox-postgres
+    databaseName: outbox_email_db
+    user: postgres
+    plan: free
+    region: oregon
+
+# Render Key-Value Store (Redis)
+# Note: On Render, Redis services can be provisioned via Blueprint

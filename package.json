@@ -27,7 +27,6 @@
     "concurrently": "^8.2.2",
     "nodemailer": "^9.0.6",
     "prisma": "5.14.0",
-    "redis-memory-server": "^0.17.1",
     "tsx": "^4.10.5"
   }
 }

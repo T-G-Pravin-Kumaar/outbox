@@ -8,12 +8,13 @@ import { searchRouter } from './routes/searchRoutes';
 import { searchService } from './services/search';
 import { adminRouter } from './routes/adminRoutes';
 import { authRouter } from './routes/authRoutes';
+import { createEmailWorker } from './workers/emailWorker';
 
 const app = express();
 
 app.use(
   cors({
-    origin: config.frontendUrl,
+    origin: config.frontendUrl || true,
     credentials: true,
   })
 );
@@ -51,9 +52,24 @@ const server = app.listen(config.port, '0.0.0.0', async () => {
   console.log(`[Backend] Outbox Email Scheduler API server running on http://localhost:${config.port}`);
   console.log(`[Backend] Health check available at http://localhost:${config.port}/health`);
   
+  // Start BullMQ Worker in-process
+  if (process.env.START_WORKER !== 'false') {
+    console.log('[Backend] Starting unified BullMQ worker...');
+    try {
+      createEmailWorker();
+    } catch (workerErr) {
+      console.warn('[Backend] Worker initialization notice:', (workerErr as Error).message);
+    }
+  }
+
   // Initialize Elasticsearch index & mappings
-  await searchService.initIndex();
+  try {
+    await searchService.initIndex();
+  } catch (esErr) {
+    console.warn('[Backend] Search service init notice:', (esErr as Error).message);
+  }
 });
 
 export default app;
 export { server };
+

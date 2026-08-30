@@ -100,15 +100,21 @@ services:
       - key: WORKER_CONCURRENCY
         value: 5
 
+  # ============================================================================
+  # 3. Redis Service
+  # ============================================================================
+  - type: redis
+    name: outbox-redis
+    plan: free
+    region: oregon
+    ipAllowList: []
+
 # ==============================================================================
-# Managed Databases & Key-Value Stores
+# Managed Databases
 # ==============================================================================
 databases:
   - name: outbox-postgres
-    databaseName: outbox_email_db
-    user: postgres
+    databaseName: outbox_db
+    user: outbox_user
     plan: free
     region: oregon
-
-# Render Key-Value Store (Redis)
-# Note: On Render, Redis services can be provisioned via Blueprint

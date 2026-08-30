@@ -1,0 +1,70 @@
+# ==============================================================================
+# Multi-stage Dockerfile for Backend API & BullMQ Background Worker
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+# 1. Base / Dependencies Stage
+# ------------------------------------------------------------------------------
+FROM node:20-alpine AS dependencies
+WORKDIR /app
+
+# Install OpenSSL for Prisma engine compatibility on Alpine
+RUN apk add --no-cache openssl libc6-compat
+
+# Copy monorepo manifests
+COPY package.json package-lock.json ./
+COPY apps/backend/package.json ./apps/backend/
+
+# Install all dependencies (including devDependencies for build)
+RUN npm ci
+
+# ------------------------------------------------------------------------------
+# 2. Builder Stage
+# ------------------------------------------------------------------------------
+FROM node:20-alpine AS builder
+WORKDIR /app
+
+RUN apk add --no-cache openssl libc6-compat
+
+COPY --from=dependencies /app/node_modules ./node_modules
+COPY --from=dependencies /app/apps/backend/node_modules ./apps/backend/node_modules
+COPY package.json package-lock.json ./
+COPY apps/backend ./apps/backend
+
+# Generate Prisma client
+WORKDIR /app/apps/backend
+RUN npx prisma generate
+
+# Build TypeScript code
+RUN npm run build
+
+# ------------------------------------------------------------------------------
+# 3. Production Runner Stage
+# ------------------------------------------------------------------------------
+FROM node:20-alpine AS runner
+WORKDIR /app
+
+RUN apk add --no-cache openssl libc6-compat curl
+
+ENV NODE_ENV=production
+ENV PORT=5000
+
+# Copy built artifacts and production dependencies
+COPY --from=builder /app/package.json ./package.json
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/apps/backend/package.json ./apps/backend/package.json
+COPY --from=builder /app/apps/backend/node_modules ./apps/backend/node_modules
+COPY --from=builder /app/apps/backend/dist ./apps/backend/dist
+COPY --from=builder /app/apps/backend/prisma ./apps/backend/prisma
+
+WORKDIR /app/apps/backend
+
+# Expose Express server port
+EXPOSE 5000
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+  CMD curl -f http://localhost:5000/health || exit 1
+
+# Default command runs the API server (can be overridden to run the worker: node dist/worker.js)
+CMD ["node", "dist/index.js"]

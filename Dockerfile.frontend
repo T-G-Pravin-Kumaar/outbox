@@ -1,0 +1,72 @@
+# ==============================================================================
+# Multi-stage Dockerfile for Next.js 14 Frontend
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+# 1. Base / Dependencies Stage
+# ------------------------------------------------------------------------------
+FROM node:20-alpine AS dependencies
+WORKDIR /app
+
+RUN apk add --no-cache libc6-compat
+
+COPY package.json package-lock.json ./
+COPY apps/frontend/package.json ./apps/frontend/
+
+RUN npm ci
+
+# ------------------------------------------------------------------------------
+# 2. Builder Stage
+# ------------------------------------------------------------------------------
+FROM node:20-alpine AS builder
+WORKDIR /app
+
+COPY --from=dependencies /app/node_modules ./node_modules
+COPY --from=dependencies /app/apps/frontend/node_modules ./apps/frontend/node_modules
+COPY package.json package-lock.json ./
+COPY apps/frontend ./apps/frontend
+
+# Build-time environment variables for Next.js client bundles
+ARG NEXT_PUBLIC_BACKEND_URL=http://localhost:5000
+ARG NEXT_PUBLIC_API_URL=http://localhost:5000/api
+ARG NEXT_PUBLIC_GOOGLE_CLIENT_ID=""
+ARG NEXT_PUBLIC_SLACK_CLIENT_ID=""
+
+ENV NEXT_PUBLIC_BACKEND_URL=$NEXT_PUBLIC_BACKEND_URL
+ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
+ENV NEXT_PUBLIC_GOOGLE_CLIENT_ID=$NEXT_PUBLIC_GOOGLE_CLIENT_ID
+ENV NEXT_PUBLIC_SLACK_CLIENT_ID=$NEXT_PUBLIC_SLACK_CLIENT_ID
+ENV NEXT_TELEMETRY_DISABLED=1
+
+WORKDIR /app/apps/frontend
+RUN npm run build
+
+# ------------------------------------------------------------------------------
+# 3. Production Runner Stage
+# ------------------------------------------------------------------------------
+FROM node:20-alpine AS runner
+WORKDIR /app
+
+RUN apk add --no-cache curl
+
+ENV NODE_ENV=production
+ENV PORT=3000
+ENV HOSTNAME="0.0.0.0"
+ENV NEXT_TELEMETRY_DISABLED=1
+
+RUN addgroup --system --gid 1001 nodejs && \
+    adduser --system --uid 1001 nextjs
+
+# Copy public directory if exists and standalone build output
+COPY --from=builder /app/apps/frontend/public ./apps/frontend/public
+COPY --from=builder --chown=nextjs:nodejs /app/apps/frontend/.next/standalone ./
+COPY --from=builder --chown=nextjs:nodejs /app/apps/frontend/.next/static ./apps/frontend/.next/static
+
+USER nextjs
+
+EXPOSE 3000
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+  CMD curl -f http://localhost:3000 || exit 1
+
+CMD ["node", "apps/frontend/server.js"]
